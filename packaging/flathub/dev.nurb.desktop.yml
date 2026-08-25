@@ -1,0 +1,101 @@
+# Flathub manifest for nurb (dev.nurb.desktop)
+#
+# NOTE: pin the exact upstream commit in the nurb-desktop module before submitting.
+#
+# First-launch provisioning downloads CPython + Node + language adapters into the
+# app data directory. This is allowed on Flathub because all writes stay under
+# XDG data home inside the sandbox.
+#
+# Build locally with:
+#   flatpak-builder --user --install --force-clean builddir packaging/flathub/dev.nurb.desktop.yml
+
+app-id: dev.nurb.desktop
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-toolchain//24.08
+command: nurb
+finish-args:
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+  - --share=network
+  - --filesystem=home
+modules:
+
+  # Node.js used at build time for npm/vite/tauri CLI
+  - name: nodejs
+    buildsystem: simple
+    sources:
+      - type: archive
+        url: https://nodejs.org/dist/v24.19.0/node-v24.19.0-linux-x64.tar.xz
+        sha256: 14b342e71204f811bde6153be8e04b62aef63c236fef92b55f9c83154b409647
+        strip-components: 1
+        dest: nodejs
+    build-commands:
+      - install -Dm755 nodejs/bin/node nodejs/bin/npm nodejs/bin/npx nodejs/bin/corepack -t /app/bin/
+      - cp -r nodejs/lib/node_modules /app/lib/
+
+  # Rust toolchain via SDK extension
+  - name: rust-toolchain
+    buildsystem: simple
+    build-commands:
+      - echo "org.freedesktop.Sdk.Extension.rust-toolchain is pulled in via sdk-extensions"
+    modules:
+      - name: org.freedesktop.Sdk.Extension.rust-toolchain
+        buildsystem: simple
+        build-commands: []
+
+  # uv provisioner used only at build time (runs scripts/stage.sh).
+  # Installed outside /app/bin so the runtime sidecar can own /app/bin/uv.
+  # Pinned from the .sha256 release asset.
+  - name: uv
+    buildsystem: simple
+    sources:
+      - type: archive
+        url: https://github.com/astral-sh/uv/releases/download/0.12.1/uv-x86_64-unknown-linux-gnu.tar.gz
+        sha256: 90b2f223fb69d19db49e117da601f64978593417988530aa733d456141b4bcbb
+        strip-components: 0
+    build-commands:
+      - install -Dm755 uv-x86_64-unknown-linux-gnu/uv /app/opt/uv/bin/uv
+
+  - name: nurb-desktop
+    buildsystem: simple
+    build-options:
+      prepend-path:
+        - /usr/lib/sdk/rust-toolchain/bin
+        - /app/opt/uv/bin
+      env:
+        CARGO_HOME: /run/build/nurb-desktop/cargo
+    # x-checker-data omitted intentionally; pin commit instead of tracking main
+    sources:
+      - type: git
+        url: https://github.com/Shpigford/nurb.git
+        branch: main
+        # Pin a specific commit here before Flathub submission:
+        # commit: <full-sha>
+    build-commands:
+      - cd desktop && npm ci --no-audit --no-fund
+      # Downloads the uv sidecar into src-tauri/binaries and builds the python
+      # wheel into src-tauri/resources; resolves uv via prepended /app/opt/uv/bin
+      - cd desktop && npm run stage
+      - cd desktop && npm run tauri build -- --bundles deb
+      - install -Dm755 desktop/src-tauri/target/release/nurb /app/bin/nurb
+      # Tauri strips the triple suffix from the externalBin sidecar
+      - install -Dm755 desktop/src-tauri/target/release/uv /app/bin/uv
+      - cp -r desktop/src-tauri/target/release/resources /app/bin/resources
+      - install -Dm644 packaging/flathub/dev.nurb.desktop.metainfo.xml /app/share/metainfo/dev.nurb.desktop.metainfo.xml
+      - install -Dm644 desktop/src-tauri/icons/128x128.png /app/share/icons/hicolor/128x128/apps/dev.nurb.desktop.png
+      - install -Dm644 desktop/src-tauri/icons/128x128@2x.png /app/share/icons/hicolor/256x256/apps/dev.nurb.desktop.png
+      - |
+        printf '%s\n' \
+          '[Desktop Entry]' \
+          'Type=Application' \
+          'Name=nurb' \
+          'Exec=nurb' \
+          'Icon=dev.nurb.desktop' \
+          'Terminal=false' \
+          'Categories=Graphics;Engineering;' \
+          > /app/share/applications/dev.nurb.desktop

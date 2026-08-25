@@ -43,7 +43,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "dmg"],
+    "targets": ["app", "dmg", "appimage"],
     "createUpdaterArtifacts": true,
     "externalBin": ["binaries/uv"],
     "resources": ["resources/*"],

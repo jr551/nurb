@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>dev.nurb.desktop</id>
+  <name>nurb</name>
+  <summary>Agentic CAD app that builds parts from plain-language descriptions</summary>
+  <metadata_license>MIT</metadata_license>
+  <project_license>FSL-1.1-MIT</project_license>
+  <developer_name>Ordinary Systems LLC</developer_name>
+  <description>
+    <p>
+      nurb is an agentic CAD application: describe the part you want in plain
+      language and it designs it for you, iterating on your feedback until the
+      model matches what you have in mind.
+    </p>
+    <p>
+      A live viewer shows the model as it takes shape, with built-in
+      printability checks so problems are caught before they reach the printer.
+      Finished designs can be exported as 3MF for slicing and 3D printing.
+    </p>
+  </description>
+  <launchable type="desktop-id">dev.nurb.desktop.desktop</launchable>
+  <provides>
+    <binary>nurb</binary>
+  </provides>
+  <url type="homepage">https://nurb.dev</url>
+  <url type="bugtracker">https://github.com/Shpigford/nurb/issues</url>
+  <content_rating type="oars-1.1"/>
+  <!-- Keep in sync with tauri.conf.json / pyproject.toml per release -->
+  <releases>
+    <release version="0.22.2" date="2026-08-25">
+      <url type="details">https://github.com/Shpigford/nurb/releases/tag/v0.22.2</url>
+    </release>
+  </releases>
+</component>

@@ -44,9 +44,16 @@ export default function Setup({ onDone }: { onDone: () => void }) {
     }
   };
 
-  // Opens a bug report with the error, app version, macOS version, and
+  // Opens a bug report with the error, app version, OS version, and
   // architecture already filled in, so a failed setup never sends anyone
   // hunting through logs.
+  // userAgentData is Chromium-only and absent from some TS DOM libs.
+  type NavWithUaData = Navigator & { userAgentData?: { platform?: string } };
+  const platform =
+    (navigator as NavWithUaData).userAgentData?.platform ??
+    navigator.platform ??
+    "Unknown";
+  const osLabel = platform === "MacIntel" || platform === "macOS" ? "macOS" : platform;
   const report = async () => {
     let version = "";
     try {
@@ -61,7 +68,7 @@ export default function Setup({ onDone }: { onDone: () => void }) {
         `app ${about.appVersion}`,
         `CAD engine ${about.nurbVersion}`,
         about.occtVersion ? `OCCT ${about.occtVersion}` : null,
-        `macOS ${about.osVersion} (${about.arch})`,
+        `${osLabel} ${about.osVersion} (${about.arch})`,
       ]
         .filter(Boolean)
         .join("\n");

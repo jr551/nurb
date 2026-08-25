@@ -132,6 +132,12 @@ textarea {
   margin: 0 -12px;
 }
 
+/* Linux builds get a native titlebar, so the traffic-light strip is dead
+   space there; collapse it to a small gap. */
+.platform-linux .rail-title {
+  height: 12px;
+}
+
 .rail-heading {
   display: flex;
   align-items: center;

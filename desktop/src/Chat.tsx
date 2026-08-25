@@ -814,7 +814,7 @@ function Chat({
         )}
         {authNeeded && (
           <div className="chat-auth">
-            {label} isn't signed in on this Mac.{" "}
+            {label} isn't signed in on this machine.{" "}
             <button
               className="chat-auth-button"
               disabled={signingIn}

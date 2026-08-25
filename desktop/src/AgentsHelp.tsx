@@ -29,9 +29,9 @@ export default function AgentsHelp({
           {missing.length > 0 ? (
             <>
               <p>
-                These work with nurb once their command-line tool is on your Mac. Paste
-                the line into Terminal, and the agent appears in the list when you come
-                back.
+                These work with nurb once their command-line tool is on this
+                machine. Paste the line into Terminal, and the agent appears in
+                the list when you come back.
               </p>
               {missing.map((agent) => (
                 <div className="agents-help-agent" key={agent.id}>
@@ -43,7 +43,7 @@ export default function AgentsHelp({
               ))}
             </>
           ) : (
-            <p>Every agent nurb supports is already installed on this Mac.</p>
+            <p>Every agent nurb supports is already installed on this machine.</p>
           )}
           <p>
             Using one that isn't here?{" "}

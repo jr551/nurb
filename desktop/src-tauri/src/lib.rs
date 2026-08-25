@@ -506,13 +506,21 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        // Flathub forbids bundled self-updaters; there the distro updates the
+        // app, so the plugin registers only outside Flatpak (see setup below).
         .manage(acp::Chats::new())
         .manage(agents::Logins::new())
         .manage(provision::Provisioner::new())
         .setup(|app| {
+            // Flathub forbids bundled self-updaters; there the distro
+            // updates the app, so the plugin registers only outside Flatpak.
+            if std::env::var_os("FLATPAK_ID").is_none() {
+                use tauri_plugin_updater::UpdaterExt;
+                app.handle()
+                    .plugin(tauri_plugin_updater::Builder::new().build())?;
+            }
             let dir = app.path().app_data_dir()?;
             // Debug-only override so tests can point the whole app (registry,
             // sessions, provisioned env) at a scratch directory while HOME

@@ -41,11 +41,18 @@ export default function About({
   onClose,
 }: Props) {
   const [copied, setCopied] = useState(false);
+  // userAgentData is Chromium-only and absent from some TS DOM libs.
+  type NavWithUaData = Navigator & { userAgentData?: { platform?: string } };
+  const platform =
+    (navigator as NavWithUaData).userAgentData?.platform ??
+    navigator.platform ??
+    "Unknown";
+  const osLabel = platform === "MacIntel" || platform === "macOS" ? "macOS" : platform;
   const debugInfo = [
-    `app ${appVersion}`,
+    `nurb ${appVersion}`,
     `CAD engine ${nurbVersion}`,
     occtVersion ? `OCCT ${occtVersion}` : null,
-    `macOS ${osVersion} (${arch})`,
+    `${osLabel} ${osVersion} (${arch})`,
   ]
     .filter(Boolean)
     .join("\n");

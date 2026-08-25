@@ -61,7 +61,7 @@ export default function GeminiKeyDialog({ onSubmit, onClose }: Props) {
             >
               Create a key in Google AI Studio
             </button>
-            <span>Stored in macOS Keychain.</span>
+            <span>Stored securely on this device.</span>
           </div>
           <div className="settings-actions">
             <button

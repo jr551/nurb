@@ -2,9 +2,9 @@
 # Stages what the desktop app bundles for first-launch provisioning: the nurb
 # wheel built from this checkout, a fully pinned hash-locked resolution of its
 # dependencies, the committed adapter manifest/lock, and the uv sidecar
-# binaries for both darwin targets. Runs before every tauri dev/build (wheel
-# and Python lock are cheap and must track the checkout); the uv downloads are
-# skipped once present.
+# binaries for the host platform's targets. Runs before every tauri dev/build
+# (wheel and Python lock are cheap and must track the checkout); the uv
+# downloads are skipped once present.
 set -eu
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -22,7 +22,17 @@ uv pip compile "$repo/pyproject.toml" --universal --python-version 3.13 \
 cp "$adapter_runtime/package.json" "$tauri/resources/adapter-package.json"
 cp "$adapter_runtime/package-lock.json" "$tauri/resources/adapter-package-lock.json"
 
-for triple in aarch64-apple-darwin x86_64-apple-darwin; do
+if [ "$(uname -s)" = "Darwin" ]; then
+  triples="aarch64-apple-darwin x86_64-apple-darwin"
+else
+  # Linux builds bundle one uv sidecar per machine architecture.
+  case "$(uname -m)" in
+    aarch64|arm64) triples="aarch64-unknown-linux-gnu" ;;
+    *)             triples="x86_64-unknown-linux-gnu" ;;
+  esac
+fi
+
+for triple in $triples; do
   out="$tauri/binaries/uv-$triple"
   [ -x "$out" ] && continue
   echo "stage: downloading uv $UV_VERSION for $triple"
@@ -30,7 +40,7 @@ for triple in aarch64-apple-darwin x86_64-apple-darwin; do
   base="https://github.com/astral-sh/uv/releases/download/$UV_VERSION"
   curl -fsSL "$base/uv-$triple.tar.gz" -o "$tmp/uv.tar.gz"
   curl -fsSL "$base/uv-$triple.tar.gz.sha256" -o "$tmp/uv.tar.gz.sha256"
-  (cd "$tmp" && printf '%s  uv.tar.gz\n' "$(cut -d' ' -f1 uv.tar.gz.sha256)" | shasum -a 256 -c - >/dev/null)
+  (cd "$tmp" && printf '%s  uv.tar.gz\n' "$(cut -d' ' -f1 uv.tar.gz.sha256)" | ${SHA256SUM:-$(command -v sha256sum >/dev/null && echo sha256sum || echo "shasum -a 256")} -c - >/dev/null)
   tar -xzf "$tmp/uv.tar.gz" -C "$tmp"
   found="$(find "$tmp" -type f -name uv | head -1)"
   [ -n "$found" ] || { echo "stage: uv binary not found in tarball" >&2; exit 1; }

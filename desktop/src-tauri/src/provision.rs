@@ -31,15 +31,29 @@ const NATIVE_CLI_HEALTH_TIMEOUT: Duration = Duration::from_secs(30);
 const NPM_CI_ARGS: &[&str] = &["ci", "--include=optional", "--no-fund", "--no-audit"];
 static PROBE_ID: AtomicU64 = AtomicU64::new(0);
 
-/// Published SHASUMS256 entries for the pinned Node tarballs.
-const NODE_SHA256: &[(&str, &str)] = &[
+/// Published SHASUMS256 entries for the pinned Node tarballs: (OS, Rust arch,
+/// checksum). The OS picks the tarball name (`darwin`/`linux`), so both
+/// platforms share one table.
+const NODE_SHA256: &[(&str, &str, &str)] = &[
     (
+        "darwin",
         "aarch64",
         "3f1cf157479c1480352083105e13faf9d008ede98e7e157746b6df940d197b94",
     ),
     (
+        "darwin",
         "x86_64",
         "d35e95230f46f6f0751df497c56622c6735e05d5e1fb1630996a005b9d328fe4",
+    ),
+    (
+        "linux",
+        "aarch64",
+        "01443c1e1a29e531ccad5a46fefa6df490d2189c49f7955904aecdbb0fe86fdc",
+    ),
+    (
+        "linux",
+        "x86_64",
+        "14b342e71204f811bde6153be8e04b62aef63c236fef92b55f9c83154b409647",
     ),
 ];
 
@@ -534,14 +548,20 @@ fn provision_chat(
     channel: &Channel<ProvisionEvent>,
 ) -> Result<(), String> {
     stage(channel, "chat");
-    let (arch, sha) = NODE_SHA256
+    let (os, arch, sha) = NODE_SHA256
         .iter()
-        .find(|(arch, _)| *arch == std::env::consts::ARCH)
-        .ok_or_else(|| format!("unsupported architecture: {}", std::env::consts::ARCH))?;
+        .find(|(os, arch, _)| *os == std::env::consts::OS && *arch == std::env::consts::ARCH)
+        .ok_or_else(|| {
+            format!(
+                "unsupported platform: {}-{}",
+                std::env::consts::OS,
+                std::env::consts::ARCH
+            )
+        })?;
     let arch = if *arch == "aarch64" { "arm64" } else { "x64" };
-    let tarball_name = format!("node-{NODE_VERSION}-darwin-{arch}.tar.xz");
+    let tarball_name = format!("node-{NODE_VERSION}-{os}-{arch}.tar.xz");
     let tarball = paths.data().join(&tarball_name);
-    let mut download = Command::new("/usr/bin/curl");
+    let mut download = Command::new(system_tool("curl"));
     download
         .args(["-fSL", "--retry", "3", "-o"])
         .arg(&tarball)
@@ -560,7 +580,7 @@ fn provision_chat(
             .map_err(|e| format!("could not clear the old runtime: {e}"))?;
     }
     std::fs::create_dir_all(paths.node_dir()).map_err(|e| e.to_string())?;
-    let mut extract = Command::new("/usr/bin/tar");
+    let mut extract = Command::new(system_tool("tar"));
     extract
         .arg("-xJf")
         .arg(&tarball)
@@ -587,8 +607,8 @@ fn provision_chat(
     let mut install = Command::new(paths.node_bin());
     install
         .arg(paths.npm_cli())
-        // A user's npm config may omit optional dependencies, but both agent
-        // SDKs ship their macOS binaries as platform-specific optionals.
+        // A user's npm config may omit optional dependencies, but the agent
+        // SDKs ship their platform binaries as platform-specific optionals.
         .args(NPM_CI_ARGS)
         .arg("--cache")
         .arg(paths.adapters().join("npm-cache"))
@@ -598,6 +618,18 @@ fn provision_chat(
     // change with app updates, not day to day.
     let _ = std::fs::remove_dir_all(paths.adapters().join("npm-cache"));
     chat_runtime_check(paths).map_err(|why| format!("the agent install finished, but {why}"))
+}
+
+
+/// An absolute path when the platform puts the tool there (macOS, most Linux
+/// distros), otherwise the bare name so PATH resolves it.
+fn system_tool(name: &str) -> String {
+    let absolute = format!("/usr/bin/{name}");
+    if std::path::Path::new(&absolute).is_file() {
+        absolute
+    } else {
+        name.to_string()
+    }
 }
 
 fn stage(channel: &Channel<ProvisionEvent>, stage: &'static str) {

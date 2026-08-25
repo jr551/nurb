@@ -26,6 +26,12 @@ import Setup from "./Setup";
 import Settings from "./Settings";
 import "./App.css";
 
+// userAgentData is Chromium-only and absent from some TS DOM libs.
+type NavWithUaData = Navigator & { userAgentData?: { platform?: string } };
+const isLinux =
+  (navigator as NavWithUaData).userAgentData?.platform === "Linux" ||
+  navigator.platform.startsWith("Linux");
+
 type Project = {
   name: string;
   path: string;
@@ -255,6 +261,7 @@ function App() {
   const [projectsFolder, setProjectsFolder] = useState<string | null>(
     () => localStorage.getItem(PROJECTS_FOLDER_KEY),
   );
+
   const [update, setUpdate] = useState<Update | null>(null);
   const [updating, setUpdating] = useState(false);
   // The one update this run acts on: found once, downloaded eagerly so the
@@ -272,7 +279,9 @@ function App() {
   // broken can still be rescued by an update. `tauri dev` serves the vite dev
   // build and skips the check entirely.
   const findUpdate = useCallback(async () => {
-    if (!import.meta.env.PROD || found.current) return found.current?.update ?? null;
+    // Only Flatpak ships on Linux today and Flathub forbids self-updating
+    // apps, so the whole updater flow stays off there.
+    if (!import.meta.env.PROD || isLinux || found.current) return found.current?.update ?? null;
     const next = await check();
     if (next && !found.current) {
       found.current = { update: next, ready: next.download().then(() => true, () => false) };
@@ -316,7 +325,9 @@ function App() {
   useEffect(() => {
     const unlisten = listen("menu:check-updates", async () => {
       // The dev build never checks, so saying "newest version" would be a lie.
-      if (!import.meta.env.PROD) return;
+      // No-op silently on Linux: Flathub forbids self-updaters, so the
+      // menu item has nothing to do there.
+      if (!import.meta.env.PROD || isLinux) return;
       try {
         const next = await findUpdate();
         if (!next) {
