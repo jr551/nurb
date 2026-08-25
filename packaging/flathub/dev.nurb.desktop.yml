@@ -1,13 +1,16 @@
 # Flathub manifest for nurb (dev.nurb.desktop)
 #
-# NOTE: pin the exact upstream commit in the nurb-desktop module before submitting.
-#
-# First-launch provisioning downloads CPython + Node + language adapters into the
-# app data directory. This is allowed on Flathub because all writes stay under
-# XDG data home inside the sandbox.
+# The desktop shell is a Tauri 2 app that bundles a Python wheel plus a uv
+# sidecar; on first launch it provisions a managed CPython, a venv from a
+# hash-pinned lock, a Node LTS, and the agent adapters into its app-data
+# directory. All of those writes stay under the XDG data home inside the
+# sandbox, which is what makes this Flathub-compatible.
 #
 # Build locally with:
 #   flatpak-builder --user --install --force-clean builddir packaging/flathub/dev.nurb.desktop.yml
+#
+# Before submission: point the git source at the upstream repository and pin
+# an exact commit (Flathub rejects branch-tracking sources).
 
 app-id: dev.nurb.desktop
 runtime: org.freedesktop.Platform
@@ -23,9 +26,11 @@ finish-args:
   - --device=dri
   - --share=network
   - --filesystem=home
+
 modules:
 
-  # Node.js used at build time for npm/vite/tauri CLI
+  # Node.js: build-time tooling for npm/vite/tauri (the runtime Node the app
+  # provisions at first launch is its own, downloaded into app data).
   - name: nodejs
     buildsystem: simple
     sources:
@@ -35,22 +40,11 @@ modules:
         strip-components: 1
         dest: nodejs
     build-commands:
-      - install -Dm755 nodejs/bin/node nodejs/bin/npm nodejs/bin/npx nodejs/bin/corepack -t /app/bin/
-      - cp -r nodejs/lib/node_modules /app/lib/
+      - cp -a nodejs/. /app/
 
-  # Rust toolchain via SDK extension
-  - name: rust-toolchain
-    buildsystem: simple
-    build-commands:
-      - echo "org.freedesktop.Sdk.Extension.rust-toolchain is pulled in via sdk-extensions"
-    modules:
-      - name: org.freedesktop.Sdk.Extension.rust-toolchain
-        buildsystem: simple
-        build-commands: []
-
-  # uv provisioner used only at build time (runs scripts/stage.sh).
-  # Installed outside /app/bin so the runtime sidecar can own /app/bin/uv.
-  # Pinned from the .sha256 release asset.
+  # uv: build-time only (runs scripts/stage.sh to build the wheel and fetch
+  # the runtime sidecar). Lives outside /app/bin so the bundled sidecar can
+  # own /app/bin/uv at runtime.
   - name: uv
     buildsystem: simple
     sources:
@@ -67,25 +61,29 @@ modules:
       prepend-path:
         - /usr/lib/sdk/rust-toolchain/bin
         - /app/opt/uv/bin
+        - /app/bin
       env:
-        CARGO_HOME: /run/build/nurb-desktop/cargo
-    # x-checker-data omitted intentionally; pin commit instead of tracking main
+        # The build sandbox mounts /run/build on a tmpfs sized to half of
+        # RAM; a cargo target dir does not fit on small builders, so it goes
+        # to /app and is removed before the module finishes.
+        CARGO_TARGET_DIR: /app/cargo-target
+        CARGO_HOME: /app/cargo-home
+        CARGO_NET_OFFLINE: 'false'
     sources:
       - type: git
-        url: https://github.com/Shpigford/nurb.git
-        branch: main
-        # Pin a specific commit here before Flathub submission:
-        # commit: <full-sha>
+        url: https://github.com/jr551/nurb.git
+        branch: linux-port
+        # commit: <pin before submission>
     build-commands:
       - cd desktop && npm ci --no-audit --no-fund
-      # Downloads the uv sidecar into src-tauri/binaries and builds the python
-      # wheel into src-tauri/resources; resolves uv via prepended /app/opt/uv/bin
+      # Builds the nurb wheel into src-tauri/resources, writes the hash-pinned
+      # dependency lock, and downloads the uv sidecar for this platform.
       - cd desktop && npm run stage
       - cd desktop && npm run tauri build -- --bundles deb
-      - install -Dm755 desktop/src-tauri/target/release/nurb /app/bin/nurb
-      # Tauri strips the triple suffix from the externalBin sidecar
-      - install -Dm755 desktop/src-tauri/target/release/uv /app/bin/uv
-      - cp -r desktop/src-tauri/target/release/resources /app/bin/resources
+      - install -Dm755 /app/cargo-target/release/nurb /app/bin/nurb
+      # Tauri strips the target-triple suffix from externalBin sidecars.
+      - install -Dm755 /app/cargo-target/release/uv /app/bin/uv
+      - cp -r /app/cargo-target/release/resources /app/bin/resources
       - install -Dm644 packaging/flathub/dev.nurb.desktop.metainfo.xml /app/share/metainfo/dev.nurb.desktop.metainfo.xml
       - install -Dm644 desktop/src-tauri/icons/128x128.png /app/share/icons/hicolor/128x128/apps/dev.nurb.desktop.png
       - install -Dm644 desktop/src-tauri/icons/128x128@2x.png /app/share/icons/hicolor/256x256/apps/dev.nurb.desktop.png
@@ -99,3 +97,4 @@ modules:
           'Terminal=false' \
           'Categories=Graphics;Engineering;' \
           > /app/share/applications/dev.nurb.desktop
+      - rm -rf /app/cargo-target /app/cargo-home
