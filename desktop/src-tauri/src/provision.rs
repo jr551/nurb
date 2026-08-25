@@ -25,8 +25,9 @@ use crate::env::{uv_sidecar, Launcher, Paths, NODE_VERSION};
 const PYTHON_VERSION: &str = "3.13";
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(2);
 // Generous because the first exec of a freshly written binary can stall for
-// many seconds while macOS assesses it (Gatekeeper/XProtect), and these CLIs
-// are large.
+// many seconds (macOS Gatekeeper/XProtect) and because the adapter CLIs are
+// large bundles: cold page cache on a low-memory machine easily exceeds a
+// warm-dev-machine 2s.
 const NATIVE_CLI_HEALTH_TIMEOUT: Duration = Duration::from_secs(30);
 const NPM_CI_ARGS: &[&str] = &["ci", "--include=optional", "--no-fund", "--no-audit"];
 static PROBE_ID: AtomicU64 = AtomicU64::new(0);
@@ -216,7 +217,7 @@ fn chat_runtime_check(paths: &Paths) -> Result<(), String> {
         let mut adapter = Command::new(paths.node_bin());
         adapter.arg(script).arg("--version");
         let version = adapter_pin.rsplit_once('@').unwrap().1;
-        probe_version(adapter, paths.data(), version, HEALTH_TIMEOUT)
+        probe_version(adapter, paths.data(), version, NATIVE_CLI_HEALTH_TIMEOUT)
             .map_err(|why| format!("the {} adapter check failed: {why}", kind.label()))?;
     }
 
@@ -531,6 +532,14 @@ fn provision_parts(
 
     stage(channel, "warmup");
     let mut warmup = Command::new(paths.venv_python());
+    // The AppImage runtime exports PYTHONHOME/PYTHONPATH pointing into the
+    // extracted bundle, and any user shell may export them (conda, pyenv).
+    // Either poisons the interpreter's stdlib lookup; the venv carries its
+    // own home via pyvenv.cfg, so the variables are pure damage here.
+    warmup
+        .env_remove("PYTHONHOME")
+        .env_remove("PYTHONPATH")
+        .env_remove("PYTHONEXECUTABLE");
     // The first OCCT import is the slow one; do it here, never on the first
     // project open.
     warmup.args(["-c", "import build123d, nurb"]);

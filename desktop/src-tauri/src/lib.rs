@@ -63,11 +63,18 @@ fn project_base(folder: Option<String>, default: PathBuf) -> PathBuf {
 }
 
 fn default_projects_folder_path(app: &AppHandle) -> Result<PathBuf, String> {
-    Ok(app
-        .path()
-        .document_dir()
-        .map_err(|e| format!("no Documents folder: {e}"))?
-        .join("nurb"))
+    // Minimal Linux sessions (a bare Xvfb, a fresh account before
+    // xdg-user-dirs runs) have no Documents entry; fall back to the home
+    // directory rather than dead-ending project creation.
+    let documents = match app.path().document_dir() {
+        Ok(dir) => dir,
+        Err(_) => home_dir().ok_or("no Documents folder and no home directory")?,
+    };
+    Ok(documents.join("nurb"))
+}
+
+fn home_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(PathBuf::from)
 }
 
 #[tauri::command]
@@ -517,7 +524,6 @@ pub fn run() {
             // Flathub forbids bundled self-updaters; there the distro
             // updates the app, so the plugin registers only outside Flatpak.
             if std::env::var_os("FLATPAK_ID").is_none() {
-                use tauri_plugin_updater::UpdaterExt;
                 app.handle()
                     .plugin(tauri_plugin_updater::Builder::new().build())?;
             }

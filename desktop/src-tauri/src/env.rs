@@ -42,13 +42,28 @@ impl Launcher {
 
     /// A command that runs the nurb CLI; callers append `dev`, `new`, etc.
     pub fn nurb(&self) -> Command {
+        // The AppImage runtime exports PYTHONHOME/PYTHONPATH into the bundle
+        // (and user shells may export them via conda/pyenv); either breaks
+        // the interpreter's stdlib lookup. The venv self-locates through
+        // pyvenv.cfg, so the variables are pure damage here.
+        let sanitize = |command: &mut Command| {
+            command
+                .env_remove("PYTHONHOME")
+                .env_remove("PYTHONPATH")
+                .env_remove("PYTHONEXECUTABLE");
+        };
         match self {
             Self::Checkout { repo } => {
                 let mut command = Command::new("uv");
                 command.args(["run", "--project"]).arg(repo).arg("nurb");
+                sanitize(&mut command);
                 command
             }
-            Self::Provisioned { paths } => Command::new(paths.venv().join("bin/nurb")),
+            Self::Provisioned { paths } => {
+                let mut command = Command::new(paths.venv().join("bin/nurb"));
+                sanitize(&mut command);
+                command
+            }
         }
     }
 
