@@ -13,11 +13,9 @@
 # an exact commit (Flathub rejects branch-tracking sources).
 
 app-id: dev.nurb.desktop
-runtime: org.freedesktop.Platform
-runtime-version: '24.08'
-sdk: org.freedesktop.Sdk
-sdk-extensions:
-  - org.freedesktop.Sdk.Extension.rust-toolchain//24.08
+runtime: org.gnome.Platform
+runtime-version: '48'
+sdk: org.gnome.Sdk
 command: nurb
 finish-args:
   - --share=ipc
@@ -59,31 +57,42 @@ modules:
     buildsystem: simple
     build-options:
       prepend-path:
-        - /usr/lib/sdk/rust-toolchain/bin
         - /app/opt/uv/bin
         - /app/bin
       env:
         # The build sandbox mounts /run/build on a tmpfs sized to half of
-        # RAM; a cargo target dir does not fit on small builders, so it goes
-        # to /app and is removed before the module finishes.
+        # RAM; a cargo target dir does not fit on small builders, so tool
+        # state lives under /app and is removed before the module finishes.
         CARGO_TARGET_DIR: /app/cargo-target
         CARGO_HOME: /app/cargo-home
+        RUSTUP_HOME: /app/rustup
         CARGO_NET_OFFLINE: 'false'
+        UV_PYTHON: /usr/bin/python3
+        NODE_OPTIONS: --dns-result-order=ipv4first
     sources:
       - type: git
         url: https://github.com/jr551/nurb.git
         branch: linux-port
         # commit: <pin before submission>
     build-commands:
-      - cd desktop && npm ci --no-audit --no-fund
+      # Rust via rustup: the Sdk rust extension is not used because
+      # flatpak-builder's sdk-extension resolution is unreliable outside the
+      # flathub buildbot. Toolchain state goes to /app and is cleaned below.
+      - |
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs |
+          sh -s -- -y --profile minimal --default-toolchain stable \
+            --no-modify-path
+
+      - cd desktop && export PATH=/app/cargo-home/bin:$PATH && npm ci --no-audit --no-fund
       # Builds the nurb wheel into src-tauri/resources, writes the hash-pinned
       # dependency lock, and downloads the uv sidecar for this platform.
-      - cd desktop && npm run stage
-      - cd desktop && npm run tauri build -- --bundles deb
+      - cd desktop && export PATH=/app/opt/uv/bin:/app/bin:$PATH && npm run stage
+      - cd desktop && export PATH=/app/cargo-home/bin:/app/opt/uv/bin:/app/bin:$PATH && npm run tauri build -- --bundles deb
       - install -Dm755 /app/cargo-target/release/nurb /app/bin/nurb
       # Tauri strips the target-triple suffix from externalBin sidecars.
       - install -Dm755 /app/cargo-target/release/uv /app/bin/uv
-      - cp -r /app/cargo-target/release/resources /app/bin/resources
+      - mkdir -p /app/lib/nurb
+      - cp -r /app/cargo-target/release/resources /app/lib/nurb/resources
       - install -Dm644 packaging/flathub/dev.nurb.desktop.metainfo.xml /app/share/metainfo/dev.nurb.desktop.metainfo.xml
       - install -Dm644 desktop/src-tauri/icons/128x128.png /app/share/icons/hicolor/128x128/apps/dev.nurb.desktop.png
       - install -Dm644 desktop/src-tauri/icons/128x128@2x.png /app/share/icons/hicolor/256x256/apps/dev.nurb.desktop.png
@@ -96,5 +105,5 @@ modules:
           'Icon=dev.nurb.desktop' \
           'Terminal=false' \
           'Categories=Graphics;Engineering;' \
-          > /app/share/applications/dev.nurb.desktop
-      - rm -rf /app/cargo-target /app/cargo-home
+          > /app/share/applications/dev.nurb.desktop.desktop
+      - rm -rf /app/cargo-target /app/cargo-home /app/rustup

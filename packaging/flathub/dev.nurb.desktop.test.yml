@@ -1,0 +1,80 @@
+# LOCAL LAB TEST variant of dev.nurb.desktop.yml: builds fully offline.
+# - dir source instead of git (node_modules vendored, wheel/resources pre-staged)
+# - rust toolchain + cargo registry vendored into the checkout (no rustup.net)
+# - stage.sh skipped (its outputs are committed into src-tauri/resources)
+# The submission manifest (dev.nurb.desktop.yml) does all of these online.
+
+app-id: dev.nurb.desktop
+runtime: org.gnome.Platform
+runtime-version: '48'
+sdk: org.gnome.Sdk
+command: nurb
+finish-args:
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+  - --share=network
+  - --filesystem=home
+
+modules:
+
+  - name: nodejs
+    buildsystem: simple
+    sources:
+      - type: archive
+        url: https://nodejs.org/dist/v24.19.0/node-v24.19.0-linux-x64.tar.xz
+        sha256: 14b342e71204f811bde6153be8e04b62aef63c236fef92b55f9c83154b409647
+        strip-components: 1
+        dest: nodejs
+    build-commands:
+      - cp -a nodejs/. /app/
+
+  - name: uv
+    buildsystem: simple
+    sources:
+      - type: archive
+        url: https://github.com/astral-sh/uv/releases/download/0.12.1/uv-x86_64-unknown-linux-gnu.tar.gz
+        sha256: 90b2f223fb69d19db49e117da601f64978593417988530aa733d456141b4bcbb
+        strip-components: 0
+    build-commands:
+      - install -Dm755 uv-x86_64-unknown-linux-gnu/uv /app/opt/uv/bin/uv
+
+  - name: nurb-desktop
+    buildsystem: simple
+    build-options:
+      env:
+        CARGO_TARGET_DIR: /app/cargo-target
+        CARGO_HOME: /run/build/nurb-desktop/.cargo-vendor
+        CARGO_NET_OFFLINE: 'true'
+    sources:
+      - type: dir
+        path: /home/debian/nurb
+    build-commands:
+      # stage.sh already ran on the host: resources/ carries the wheel, the
+      # hash-pinned lock, the adapter manifests, and the uv sidecar. Skip it,
+      # including its beforeBuildCommand hook.
+      - |
+        sed -i 's/"npm run stage && npm run build"/"npm run build"/; s/"createUpdaterArtifacts": true/"createUpdaterArtifacts": false/' desktop/src-tauri/tauri.conf.json
+      - |
+        cd desktop && export PATH=/run/build/nurb-desktop/packaging/rust-vendor/toolchains/stable-x86_64-unknown-linux-gnu/bin:/app/bin:$PATH \
+        && npm run tauri build -- --bundles deb
+      - install -Dm755 /app/cargo-target/release/nurb /app/bin/nurb
+      - install -Dm755 /app/cargo-target/release/uv /app/bin/uv
+      - mkdir -p /app/lib/nurb
+      - cp -r /app/cargo-target/release/resources /app/lib/nurb/resources
+      - install -Dm644 packaging/flathub/dev.nurb.desktop.metainfo.xml /app/share/metainfo/dev.nurb.desktop.metainfo.xml
+      - install -Dm644 desktop/src-tauri/icons/128x128.png /app/share/icons/hicolor/128x128/apps/dev.nurb.desktop.png
+      - install -Dm644 desktop/src-tauri/icons/128x128@2x.png /app/share/icons/hicolor/256x256/apps/dev.nurb.desktop.png
+      - mkdir -p /app/share/applications
+      - |
+        printf '%s\n' \
+          '[Desktop Entry]' \
+          'Type=Application' \
+          'Name=nurb' \
+          'Exec=nurb' \
+          'Icon=dev.nurb.desktop' \
+          'Terminal=false' \
+          'Categories=Graphics;Engineering;' \
+          > /app/share/applications/dev.nurb.desktop.desktop
+      - rm -rf /app/cargo-target

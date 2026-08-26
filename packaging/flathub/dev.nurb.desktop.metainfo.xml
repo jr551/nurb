@@ -4,8 +4,8 @@
   <name>nurb</name>
   <summary>Agentic CAD app that builds parts from plain-language descriptions</summary>
   <metadata_license>MIT</metadata_license>
-  <project_license>FSL-1.1-MIT</project_license>
-  <developer_name>Ordinary Systems LLC</developer_name>
+  <project_license>LicenseRef-FSL-1.1-MIT</project_license>
+  <developer><name>Ordinary Systems LLC</name></developer>
   <description>
     <p>
       nurb is an agentic CAD application: describe the part you want in plain
